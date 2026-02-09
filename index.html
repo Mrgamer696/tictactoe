@@ -1,0 +1,70 @@
+<!DOCTYPE html>
+<html lang="ru">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>X/O Mini App</title>
+    <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <style>
+        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #ffffff; color: #000; margin: 0; padding: 20px; }
+        .grid { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; margin-top: 20px; }
+        .cell { width: 100px; height: 100px; border: 2px solid #333; display: flex; 
+                align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; }
+        h3 { margin-bottom: 10px; }
+    </style>
+</head>
+<body>
+    <h3>Крестики-Нолики</h3>
+    <div id="status">Твой ход!</div>
+    <div class="grid" id="board"></div>
+
+    <script>
+        const tg = window.Telegram.WebApp;
+        tg.expand();
+        tg.ready(); // Сообщаем телеграму, что приложение готово
+
+        const boardElement = document.getElementById('board');
+        const statusElement = document.getElementById('status');
+        let cells = Array(9).fill(null);
+        let turn = 'X';
+
+        function createBoard() {
+            boardElement.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.addEventListener('click', () => makeMove(i));
+                boardElement.appendChild(cell);
+            }
+        }
+
+        function makeMove(i) {
+            if (cells[i] || checkWinner()) return;
+            cells[i] = turn;
+            render();
+            if (checkWinner()) {
+                statusElement.innerText = `Победил ${cells[i]}!`;
+            } else {
+                turn = turn === 'X' ? 'O' : 'X';
+                statusElement.innerText = `Ход: ${turn}`;
+            }
+        }
+
+        function checkWinner() {
+            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            for (let line of lines) {
+                const [a, b, c] = line;
+                if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
+            }
+            return null;
+        }
+
+        function render() {
+            const domCells = document.querySelectorAll('.cell');
+            cells.forEach((val, i) => domCells[i].innerText = val || '');
+        }
+
+        createBoard();
+    </script>
+</body>
+</html>
