@@ -3,28 +3,94 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
+    <title>Tic-Tac-Toe Mini App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-database-compat.js"></script>
+    
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; overflow: hidden; }
-        .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; margin-top: 20px; }
-        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; }
-        button { margin-top: 20px; padding: 10px 20px; border: none; border-radius: 8px; background: #0088cc; color: white; font-weight: bold; cursor: pointer; }
-        #status { margin-top: 15px; font-size: 1.1rem; color: #00ccff; }
+        body { 
+            background: #1a1a1a; 
+            color: white; 
+            text-align: center; 
+            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
+            margin: 0; 
+            padding: 20px; 
+            display: flex;
+            flex-direction: column;
+            align-items: center;
+            justify-content: center;
+            min-height: 90vh;
+        }
+
+        h3 { margin-bottom: 5px; color: #fff; }
+
+        #status { 
+            margin-bottom: 20px; 
+            font-size: 1.4rem; 
+            font-weight: bold; 
+            height: 30px;
+            transition: 0.3s;
+        }
+
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(3, 95px); 
+            gap: 12px; 
+            justify-content: center; 
+        }
+
+        .cell { 
+            width: 95px; 
+            height: 95px; 
+            background: #2a2a2a; 
+            border-radius: 15px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 3rem; 
+            cursor: pointer; 
+            font-weight: 900;
+            transition: transform 0.1s, background 0.2s;
+            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
+        }
+
+        .cell:active { transform: scale(0.95); }
+
+        /* Цвета для символов */
+        .x-color { color: #ff4d4d; text-shadow: 0 0 15px rgba(255, 77, 77, 0.4); }
+        .o-color { color: #2ecc71; text-shadow: 0 0 15px rgba(46, 204, 113, 0.4); }
+
+        .btn-reset { 
+            margin-top: 30px; 
+            padding: 12px 25px; 
+            border: none; 
+            border-radius: 10px; 
+            background: #333; 
+            color: #ccc; 
+            font-weight: bold; 
+            cursor: pointer;
+            transition: 0.2s;
+        }
+
+        .btn-reset:hover { background: #444; color: #fff; }
     </style>
 </head>
 <body>
-    <h3>Крестики-Нолики</h3>
-    <div id="status">Подключение...</div>
+
+    <h3 id="title">Крестики-Нолики</h3>
+    <div id="status">Загрузка...</div>
+    
     <div class="grid" id="grid"></div>
-    <button onclick="resetGame()">Новая игра</button>
+
+    <button class="btn-reset" onclick="resetGame()">Начать заново</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
+        tg.ready();
 
-        // ТВОЙ КОНФИГ FIREBASE
+        // 1. КОНФИГ FIREBASE (Твои данные)
         const firebaseConfig = {
             apiKey: "AIzaSyAHHiHrqqrmCLErO8kxZI1N8bYQ-amk0M",
             authDomain: "tictactoe-tg.firebaseapp.com",
@@ -38,37 +104,42 @@
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Получаем уникальный ID игры из URL
+        // 2. ОПРЕДЕЛЕНИЕ КОМНАТЫ
         const urlParams = new URLSearchParams(window.location.search);
-        const gameId = urlParams.get('game_id') || 'lobby';
+        // Берем ID из ссылки (game_id) или из параметров запуска Telegram
+        const gameId = urlParams.get('game_id') || tg.initDataUnsafe.start_param || 'global_lobby';
         const gameRef = db.ref('games/' + gameId);
 
         let board = Array(9).fill("");
         let turn = "X";
 
-        function createBoard() {
-            const grid = document.getElementById('grid');
-            grid.innerHTML = '';
+        // 3. СОЗДАНИЕ ПОЛЯ
+        function initGrid() {
+            const gridElement = document.getElementById('grid');
+            gridElement.innerHTML = '';
             for (let i = 0; i < 9; i++) {
                 const cell = document.createElement('div');
                 cell.className = 'cell';
                 cell.id = 'c' + i;
                 cell.onclick = () => makeMove(i);
-                grid.appendChild(cell);
+                gridElement.appendChild(cell);
             }
         }
 
-        gameRef.on('value', (snap) => {
-            const data = snap.val();
+        // 4. СИНХРОНИЗАЦИЯ С ОБЛАКОМ
+        gameRef.on('value', (snapshot) => {
+            const data = snapshot.val();
             if (data) {
                 board = data.board;
                 turn = data.turn;
                 render(data.winner);
             } else {
+                // Если игры еще нет в базе, создаем её
                 resetGame();
             }
         });
 
+        // 5. ЛОГИКА ХОДА
         function makeMove(i) {
             if (board[i] === "" && !checkWinner(board)) {
                 board[i] = turn;
@@ -81,31 +152,56 @@
             }
         }
 
+        // 6. ОТРИСОВКА ИНТЕРФЕЙСА
         function render(winner) {
-            board.forEach((val, i) => document.getElementById('c' + i).innerText = val);
+            board.forEach((val, i) => {
+                const cell = document.getElementById('c' + i);
+                cell.innerText = val;
+                
+                // Сбрасываем и ставим цвета
+                cell.classList.remove('x-color', 'o-color');
+                if (val === "X") cell.classList.add('x-color');
+                if (val === "O") cell.classList.add('o-color');
+            });
+
             const status = document.getElementById('status');
             if (winner) {
-                status.innerText = winner === "Draw" ? "Ничья!" : "Победил " + winner + "!";
-                status.style.color = "#00ff00";
+                if (winner === "Draw") {
+                    status.innerText = "🤝 Ничья!";
+                    status.style.color = "#aaa";
+                } else {
+                    status.innerText = "🎉 Победил " + winner + "!";
+                    status.style.color = (winner === "X") ? "#ff4d4d" : "#2ecc71";
+                }
             } else {
                 status.innerText = "Ход: " + turn;
-                status.style.color = "#00ccff";
+                status.style.color = (turn === "X") ? "#ff4d4d" : "#2ecc71";
             }
         }
 
+        // 7. СБРОС ИГРЫ
         function resetGame() {
-            gameRef.set({ board: Array(9).fill(""), turn: "X", winner: null });
+            gameRef.set({
+                board: Array(9).fill(""),
+                turn: "X",
+                winner: null
+            });
         }
 
+        // ПРОВЕРКА ПОБЕДИТЕЛЯ
         function checkWinner(b) {
-            const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            const lines = [
+                [0,1,2], [3,4,5], [6,7,8], // горизонтали
+                [0,3,6], [1,4,7], [2,5,8], // вертикали
+                [0,4,8], [2,4,6]           // диагонали
+            ];
             for (let l of lines) {
                 if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return b[l[0]];
             }
             return b.includes("") ? null : "Draw";
         }
 
-        createBoard();
+        initGrid();
     </script>
 </body>
 </html>
