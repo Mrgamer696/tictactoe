@@ -1,94 +1,100 @@
 <!DOCTYPE html>
-<html>
+<html lang="ru">
 <head>
     <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app-compat.js"></script>
     <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-database-compat.js"></script>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; }
-        .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; margin-top: 30px; }
-        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2rem; cursor: pointer; transition: 0.2s; }
-        .cell:active { transform: scale(0.9); }
-        #status { margin-top: 20px; font-size: 1.2rem; color: #aaa; }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; overflow: hidden; }
+        .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; margin-top: 20px; }
+        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; }
+        button { margin-top: 20px; padding: 10px 20px; border: none; border-radius: 8px; background: #0088cc; color: white; font-weight: bold; cursor: pointer; }
+        #status { margin-top: 15px; font-size: 1.1rem; color: #00ccff; }
     </style>
 </head>
 <body>
-    <h2 id="title">Крестики-Нолики</h2>
-    <div id="status">Загрузка игры...</div>
+    <h3>Крестики-Нолики</h3>
+    <div id="status">Подключение...</div>
     <div class="grid" id="grid"></div>
+    <button onclick="resetGame()">Новая игра</button>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
 
-        // 1. ВСТАВЬ СВОЙ КОНФИГ ИЗ FIREBASE ТУТ:
+        // ТВОЙ КОНФИГ FIREBASE
         const firebaseConfig = {
-            apiKey: "AIzaSyAHHiHrqqqrmCLErO8kxZI1N8bYQ-amk0M",
+            apiKey: "AIzaSyAHHiHrqqrmCLErO8kxZI1N8bYQ-amk0M",
+            authDomain: "tictactoe-tg.firebaseapp.com",
             databaseURL: "https://tictactoe-tg-default-rtdb.europe-west1.firebasedatabase.app",
             projectId: "tictactoe-tg",
+            storageBucket: "tictactoe-tg.firebasestorage.app",
+            messagingSenderId: "104026178659",
             appId: "1:104026178659:web:eada04c140696e868ce456"
         };
         
         firebase.initializeApp(firebaseConfig);
         const db = firebase.database();
 
-        // Получаем уникальный ID комнаты (например, ID чата или пользователя)
-        const gameId = tg.initDataUnsafe.chat?.id || tg.initDataUnsafe.user?.id || "default_room";
+        // Получаем уникальный ID игры из URL
+        const urlParams = new URLSearchParams(window.location.search);
+        const gameId = urlParams.get('game_id') || 'lobby';
         const gameRef = db.ref('games/' + gameId);
 
-        const statusText = document.getElementById('status');
-        const gridElement = document.getElementById('grid');
-        let currentBoard = Array(9).fill("");
-        let currentTurn = "X";
+        let board = Array(9).fill("");
+        let turn = "X";
 
-        // Создаем кнопки
-        for (let i = 0; i < 9; i++) {
-            const cell = document.createElement('div');
-            cell.className = 'cell';
-            cell.id = 'cell-' + i;
-            cell.onclick = () => makeMove(i);
-            gridElement.appendChild(cell);
+        function createBoard() {
+            const grid = document.getElementById('grid');
+            grid.innerHTML = '';
+            for (let i = 0; i < 9; i++) {
+                const cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = 'c' + i;
+                cell.onclick = () => makeMove(i);
+                grid.appendChild(cell);
+            }
         }
 
-        // Слушаем изменения в базе данных
-        gameRef.on('value', (snapshot) => {
-            const data = snapshot.val();
+        gameRef.on('value', (snap) => {
+            const data = snap.val();
             if (data) {
-                currentBoard = data.board;
-                currentTurn = data.turn;
-                updateUI();
+                board = data.board;
+                turn = data.turn;
+                render(data.winner);
             } else {
-                // Если игры нет, создаем новую
                 resetGame();
             }
         });
 
         function makeMove(i) {
-            if (currentBoard[i] === "" && !checkWinner(currentBoard)) {
-                currentBoard[i] = currentTurn;
-                const nextTurn = currentTurn === "X" ? "O" : "X";
+            if (board[i] === "" && !checkWinner(board)) {
+                board[i] = turn;
+                const winner = checkWinner(board);
                 gameRef.set({
-                    board: currentBoard,
-                    turn: nextTurn
+                    board: board,
+                    turn: turn === "X" ? "O" : "X",
+                    winner: winner
                 });
             }
         }
 
-        function updateUI() {
-            currentBoard.forEach((val, i) => {
-                document.getElementById('cell-' + i).innerText = val;
-            });
-            const winner = checkWinner(currentBoard);
+        function render(winner) {
+            board.forEach((val, i) => document.getElementById('c' + i).innerText = val);
+            const status = document.getElementById('status');
             if (winner) {
-                statusText.innerText = winner === "Draw" ? "Ничья!" : "Победил " + winner + "!";
+                status.innerText = winner === "Draw" ? "Ничья!" : "Победил " + winner + "!";
+                status.style.color = "#00ff00";
             } else {
-                statusText.innerText = "Ход: " + currentTurn;
+                status.innerText = "Ход: " + turn;
+                status.style.color = "#00ccff";
             }
         }
 
         function resetGame() {
-            gameRef.set({ board: Array(9).fill(""), turn: "X" });
+            gameRef.set({ board: Array(9).fill(""), turn: "X", winner: null });
         }
 
         function checkWinner(b) {
@@ -98,6 +104,8 @@
             }
             return b.includes("") ? null : "Draw";
         }
+
+        createBoard();
     </script>
 </body>
 </html>
