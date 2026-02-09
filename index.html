@@ -1,70 +1,103 @@
 <!DOCTYPE html>
-<html lang="ru">
+<html>
 <head>
     <meta charset="UTF-8">
-    <meta name="viewport" content="width=device-width, initial-scale=1.0">
-    <title>X/O Mini App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app-compat.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-database-compat.js"></script>
     <style>
-        body { font-family: sans-serif; display: flex; flex-direction: column; align-items: center; background: #ffffff; color: #000; margin: 0; padding: 20px; }
-        .grid { display: grid; grid-template-columns: repeat(3, 100px); gap: 5px; margin-top: 20px; }
-        .cell { width: 100px; height: 100px; border: 2px solid #333; display: flex; 
-                align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; }
-        h3 { margin-bottom: 10px; }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; }
+        .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; margin-top: 30px; }
+        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2rem; cursor: pointer; transition: 0.2s; }
+        .cell:active { transform: scale(0.9); }
+        #status { margin-top: 20px; font-size: 1.2rem; color: #aaa; }
     </style>
 </head>
 <body>
-    <h3>Крестики-Нолики</h3>
-    <div id="status">Твой ход!</div>
-    <div class="grid" id="board"></div>
+    <h2 id="title">Крестики-Нолики</h2>
+    <div id="status">Загрузка игры...</div>
+    <div class="grid" id="grid"></div>
 
     <script>
         const tg = window.Telegram.WebApp;
         tg.expand();
-        tg.ready(); // Сообщаем телеграму, что приложение готово
 
-        const boardElement = document.getElementById('board');
-        const statusElement = document.getElementById('status');
-        let cells = Array(9).fill(null);
-        let turn = 'X';
+        // 1. ВСТАВЬ СВОЙ КОНФИГ ИЗ FIREBASE ТУТ:
+        const firebaseConfig = {
+            apiKey: "AIzaSyAHHiHrqqqrmCLErO8kxZI1N8bYQ-amk0M",
+            databaseURL: "https://tictactoe-tg-default-rtdb.europe-west1.firebasedatabase.app",
+            projectId: "tictactoe-tg",
+            appId: "1:104026178659:web:eada04c140696e868ce456"
+        };
+        
+        firebase.initializeApp(firebaseConfig);
+        const db = firebase.database();
 
-        function createBoard() {
-            boardElement.innerHTML = '';
-            for (let i = 0; i < 9; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'cell';
-                cell.addEventListener('click', () => makeMove(i));
-                boardElement.appendChild(cell);
-            }
+        // Получаем уникальный ID комнаты (например, ID чата или пользователя)
+        const gameId = tg.initDataUnsafe.chat?.id || tg.initDataUnsafe.user?.id || "default_room";
+        const gameRef = db.ref('games/' + gameId);
+
+        const statusText = document.getElementById('status');
+        const gridElement = document.getElementById('grid');
+        let currentBoard = Array(9).fill("");
+        let currentTurn = "X";
+
+        // Создаем кнопки
+        for (let i = 0; i < 9; i++) {
+            const cell = document.createElement('div');
+            cell.className = 'cell';
+            cell.id = 'cell-' + i;
+            cell.onclick = () => makeMove(i);
+            gridElement.appendChild(cell);
         }
+
+        // Слушаем изменения в базе данных
+        gameRef.on('value', (snapshot) => {
+            const data = snapshot.val();
+            if (data) {
+                currentBoard = data.board;
+                currentTurn = data.turn;
+                updateUI();
+            } else {
+                // Если игры нет, создаем новую
+                resetGame();
+            }
+        });
 
         function makeMove(i) {
-            if (cells[i] || checkWinner()) return;
-            cells[i] = turn;
-            render();
-            if (checkWinner()) {
-                statusElement.innerText = `Победил ${cells[i]}!`;
+            if (currentBoard[i] === "" && !checkWinner(currentBoard)) {
+                currentBoard[i] = currentTurn;
+                const nextTurn = currentTurn === "X" ? "O" : "X";
+                gameRef.set({
+                    board: currentBoard,
+                    turn: nextTurn
+                });
+            }
+        }
+
+        function updateUI() {
+            currentBoard.forEach((val, i) => {
+                document.getElementById('cell-' + i).innerText = val;
+            });
+            const winner = checkWinner(currentBoard);
+            if (winner) {
+                statusText.innerText = winner === "Draw" ? "Ничья!" : "Победил " + winner + "!";
             } else {
-                turn = turn === 'X' ? 'O' : 'X';
-                statusElement.innerText = `Ход: ${turn}`;
+                statusText.innerText = "Ход: " + currentTurn;
             }
         }
 
-        function checkWinner() {
+        function resetGame() {
+            gameRef.set({ board: Array(9).fill(""), turn: "X" });
+        }
+
+        function checkWinner(b) {
             const lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            for (let line of lines) {
-                const [a, b, c] = line;
-                if (cells[a] && cells[a] === cells[b] && cells[a] === cells[c]) return cells[a];
+            for (let l of lines) {
+                if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return b[l[0]];
             }
-            return null;
+            return b.includes("") ? null : "Draw";
         }
-
-        function render() {
-            const domCells = document.querySelectorAll('.cell');
-            cells.forEach((val, i) => domCells[i].innerText = val || '');
-        }
-
-        createBoard();
     </script>
 </body>
 </html>
