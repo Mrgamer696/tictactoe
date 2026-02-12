@@ -76,33 +76,47 @@
             }
         });
 
-        function makeMove(i) {
-            // Если клетка занята или игра окончена - ничего не делаем
-            if (board[i] !== "" || checkWinner(board)) return;
+            function makeMove(i) {
+        // 1. Если клетка занята или игра окончена - выходим
+        if (board[i] !== "" || checkWinner(board)) return;
 
-            // Назначаем игроков, если они еще не определены
-            if (turn === "X" && !playerX) playerX = myId;
-            else if (turn === "O" && !playerO && myId !== playerX) playerO = myId;
-
-            // ПРОВЕРКА: Твой ли сейчас ход?
-            if (turn === "X" && myId !== playerX) {
-                tg.showAlert("Вы играете за Нолики (или вы зритель)!");
-                return;
-            }
-            if (turn === "O" && myId !== playerO) {
-                tg.showAlert("Вы играете за Крестики!");
-                return;
-            }
-
-            board[i] = turn;
-            gameRef.set({
-                board: board,
-                turn: (turn === "X" ? "O" : "X"),
-                winner: checkWinner(board),
-                playerX: playerX,
-                playerO: playerO
-            });
+        // 2. Регистрация игроков (кто первый нажал - X, кто второй - O)
+        if (!playerX) {
+            // Первый клик в новой игре назначает игрока X
+            playerX = myId;
+        } else if (!playerO && myId !== playerX) {
+            // Второй клик (от другого человека) назначает игрока O
+            playerO = myId;
         }
+
+        // 3. ПРОВЕРКА ХОДА (Самое важное)
+        if (turn === "X") {
+            if (myId !== playerX) {
+                tg.showAlert("Сейчас ход Крестиков! Вы не можете ходить.");
+                return;
+            }
+        } else if (turn === "O") {
+            if (myId !== playerO) {
+                if (!playerO) {
+                    // Если за О еще никто не закрепился, разрешаем текущему игроку стать О
+                    playerO = myId;
+                } else {
+                    tg.showAlert("Сейчас ход Ноликов! Вы не можете ходить.");
+                    return;
+                }
+            }
+        }
+
+        // 4. Если проверки пройдены — делаем ход
+        board[i] = turn;
+        gameRef.set({
+            board: board,
+            turn: (turn === "X" ? "O" : "X"),
+            winner: checkWinner(board),
+            playerX: playerX,
+            playerO: playerO
+        });
+    }
 
         function render(winner) {
             for (var i = 0; i < 9; i++) {
