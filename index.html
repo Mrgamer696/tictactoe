@@ -78,39 +78,50 @@
         });
 
         function makeMove(i) {
-            if (board[i] !== "" || checkWinner(board)) return;
+    // 1. Если клетка занята или игра окончена - выходим
+    if (board[i] !== "" || checkWinner(board)) return;
 
-            // Назначение ролей
-            if (turn === "X") {
-                if (!playerX) {
-                    playerX = myId;
-                } else if (myId !== playerX) {
-                    tg.showAlert("Сейчас ход Крестиков, а вы — не он!");
-                    return;
-                }
-            } else if (turn === "O") {
-                // Запрет игроку X ходить за O
-                if (myId === playerX) {
-                    tg.showAlert("Вы играете за Крестики! Ждите хода противника.");
-                    return;
-                }
-                if (!playerO) {
-                    playerO = myId;
-                } else if (myId !== playerO) {
-                    tg.showAlert("Сейчас ход Ноликов, а вы — не он!");
-                    return;
-                }
-            }
+    // 2. Если myId не определился (редкий баг Telegram), попробуем взять его снова
+    if (!myId) {
+        myId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "guest_" + Math.random();
+    }
 
-            board[i] = turn;
-            gameRef.set({
-                board: board,
-                turn: (turn === "X" ? "O" : "X"),
-                winner: checkWinner(board),
-                playerX: playerX,
-                playerO: playerO
-            });
+    // 3. ЛОГИКА ХОДА
+    if (turn === "X") {
+        // Если X еще не назначен - назначаем текущего игрока
+        if (!playerX) {
+            playerX = myId;
+        } else if (myId !== playerX) {
+            tg.showAlert("Сейчас ход Крестиков. Вы за них не играете.");
+            return;
         }
+    } else if (turn === "O") {
+        // Если ты - игрок X, ты НЕ можешь ходить за O
+        if (myId === playerX) {
+            tg.showAlert("Вы играете за Крестики! Ждите хода противника.");
+            return;
+        }
+
+        // Если игрок O еще не назначен - ПЕРВЫЙ, кто нажмет в ход O, становится игроком O
+        if (!playerO) {
+            playerO = myId;
+        } else if (myId !== playerO) {
+            tg.showAlert("Это место уже занято другим игроком!");
+            return;
+        }
+    }
+
+    // 4. Сохраняем ход и вибрируем
+    tg.HapticFeedback.impactOccurred('medium');
+    board[i] = turn;
+    gameRef.set({
+        board: board,
+        turn: (turn === "X" ? "O" : "X"),
+        winner: checkWinner(board),
+        playerX: playerX,
+        playerO: playerO
+    });
+}
 
         function render(winner) {
             for (var i = 0; i < 9; i++) {
