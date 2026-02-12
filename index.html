@@ -76,36 +76,45 @@
             }
         });
 
-            function makeMove(i) {
-        // 1. Если клетка занята или игра окончена - выходим
+    function makeMove(i) {
+        // 1. Базовые проверки: занята ли клетка или есть ли победитель
         if (board[i] !== "" || checkWinner(board)) return;
 
-        // 2. Регистрация игроков (кто первый нажал - X, кто второй - O)
-        if (!playerX) {
-            // Первый клик в новой игре назначает игрока X
-            playerX = myId;
-        } else if (!playerO && myId !== playerX) {
-            // Второй клик (от другого человека) назначает игрока O
-            playerO = myId;
-        }
-
-        // 3. ПРОВЕРКА ХОДА (Самое важное)
+        // 2. Логика назначения ролей и блокировки
         if (turn === "X") {
-            if (myId !== playerX) {
-                tg.showAlert("Сейчас ход Крестиков! Вы не можете ходить.");
+            // Если за X еще никто не закрепился — закрепляем текущего игрока
+            if (!playerX) {
+                playerX = myId;
+            } else if (myId !== playerX) {
+                tg.showAlert("Сейчас ход Крестиков, а вы — не он!");
                 return;
             }
         } else if (turn === "O") {
-            if (myId !== playerO) {
-                if (!playerO) {
-                    // Если за О еще никто не закрепился, разрешаем текущему игроку стать О
-                    playerO = myId;
-                } else {
-                    tg.showAlert("Сейчас ход Ноликов! Вы не можете ходить.");
-                    return;
-                }
+            // Проверяем, не пытается ли игрок X ходить за O
+            if (myId === playerX) {
+                tg.showAlert("Вы играете за Крестики! Подождите хода противника.");
+                return;
+            }
+
+            // Если за O еще никто не закрепился — закрепляем текущего игрока
+            if (!playerO) {
+                playerO = myId;
+            } else if (myId !== playerO) {
+                tg.showAlert("Сейчас ход Ноликов, а вы — не он!");
+                return;
             }
         }
+
+    // 3. Если все проверки пройдены, обновляем базу данных
+    board[i] = turn;
+    gameRef.set({
+        board: board,
+        turn: (turn === "X" ? "O" : "X"),
+        winner: checkWinner(board),
+        playerX: playerX,
+        playerO: playerO
+    });
+}
 
         // 4. Если проверки пройдены — делаем ход
         board[i] = turn;
