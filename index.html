@@ -8,42 +8,28 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 95vh; }
-        .grid { 
-            display: grid; 
-            grid-template-columns: repeat(10, 1fr); 
-            gap: 4px; 
-            width: 95vw; 
-            max-width: 400px;
-            background: #444;
-            padding: 4px;
-            border-radius: 8px;
-        }
-        .cell { 
-            aspect-ratio: 1/1;
-            background: #333; 
-            border-radius: 4px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 1.2rem; 
-            cursor: pointer; 
-            font-weight: bold; 
-        }
+        .grid { display: grid; grid-template-columns: repeat(10, 1fr); gap: 2px; width: 95vw; max-width: 400px; background: #444; padding: 2px; border-radius: 5px; }
+        .cell { aspect-ratio: 1/1; background: #333; display: flex; align-items: center; justify-content: center; font-size: 1rem; cursor: pointer; font-weight: bold; }
         .x-color { color: #ff4d4d; }
         .o-color { color: #2ecc71; }
-        #status { margin-bottom: 15px; font-size: 1rem; font-weight: bold; color: #00ccff; height: 20px; }
-        button { margin-top: 15px; padding: 8px 16px; border-radius: 8px; border: none; background: #444; color: white; cursor: pointer; }
+        #status { margin-bottom: 10px; font-size: 0.9rem; font-weight: bold; color: #00ccff; }
+        #debug { font-size: 0.7rem; color: #666; margin-top: 5px; }
+        button { margin-top: 10px; padding: 8px 16px; border: none; border-radius: 5px; background: #444; color: white; }
     </style>
 </head>
 <body>
     <div id="status">Загрузка...</div>
     <div class="grid" id="grid"></div>
-    <button onclick="resetGame()">Сброс</button>
+    <button onclick="resetGame()">Сброс игры</button>
+    <div id="debug"></div>
 
     <script>
         var tg = window.Telegram.WebApp;
         tg.expand();
-        var myId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "guest_" + Math.random();
+
+        // Генерируем ID, если Telegram его не дал (для тестов вне ТГ)
+        var myId = (tg.initDataUnsafe && tg.initDataUnsafe.user) ? tg.initDataUnsafe.user.id : "user_" + Math.floor(Math.random() * 1000000);
+        document.getElementById('debug').innerText = "Ваш ID: " + myId;
 
         var firebaseConfig = {
             apiKey: "AIzaSyAHHiHrqqrmCLErO8kxZI1N8bYQ-amk0M",
@@ -58,32 +44,32 @@
         firebase.initializeApp(firebaseConfig);
         var db = firebase.database();
         var urlParams = new URLSearchParams(window.location.search);
-        var gameId = urlParams.get('game_id') || 'lobby_10x10';
+        var gameId = urlParams.get('game_id') || 'lobby_default';
         var gameRef = db.ref('games/' + gameId);
 
         var size = 10;
-        var board = Array(size * size).fill("");
+        var board = Array(100).fill("");
         var turn = "X", playerX = null, playerO = null;
 
         function initGrid() {
             var gridElement = document.getElementById('grid');
             gridElement.innerHTML = '';
-            for (var i = 0; i < size * size; i++) {
-                (function(index) {
-                    var cell = document.createElement('div');
-                    cell.className = 'cell';
-                    cell.id = 'c' + index;
-                    cell.onclick = function() { makeMove(index); };
-                    gridElement.appendChild(cell);
-                })(i);
+            for (var i = 0; i < 100; i++) {
+                var cell = document.createElement('div');
+                cell.className = 'cell';
+                cell.id = 'c' + i;
+                (function(idx) { cell.onclick = function() { makeMove(idx); }; })(i);
+                gridElement.appendChild(cell);
             }
         }
 
         gameRef.on('value', function(snapshot) {
             var data = snapshot.val();
             if (data) {
-                board = data.board; turn = data.turn;
-                playerX = data.playerX; playerO = data.playerO;
+                board = data.board || Array(100).fill("");
+                turn = data.turn || "X";
+                playerX = data.playerX || null;
+                playerO = data.playerO || null;
                 render(data.winner);
             } else { resetGame(); }
         });
@@ -91,14 +77,17 @@
         function makeMove(i) {
             if (board[i] !== "" || checkWinnerLogic()) return;
 
-            // Назначение ролей
+            // Назначение ролей "на лету"
             if (turn === "X") {
-                if (!playerX) playerX = myId;
-                else if (myId !== playerX) { tg.showAlert("Ход Крестиков!"); return; }
+                if (!playerX) playerX = myId; 
+                if (myId !== playerX) { tg.showAlert("Это не ваш ход! (Вы не X)"); return; }
             } else {
-                if (myId === playerX) { tg.showAlert("Вы за X! Ждите оппонента."); return; }
-                if (!playerO) playerO = myId;
-                else if (myId !== playerO) { tg.showAlert("Ход Ноликов!"); return; }
+                if (!playerO && myId !== playerX) playerO = myId;
+                if (myId !== playerO) { 
+                    if (myId === playerX) tg.showAlert("Вы играете за X, ждите противника!");
+                    else tg.showAlert("Это не ваш ход!");
+                    return; 
+                }
             }
 
             board[i] = turn;
@@ -107,19 +96,24 @@
                 board: board,
                 turn: (turn === "X" ? "O" : "X"),
                 winner: checkWinnerLogic(),
-                playerX: playerX, playerO: playerO
+                playerX: playerX,
+                playerO: playerO
             });
         }
 
         function render(winner) {
-            board.forEach(function(val, i) {
+            for (var i = 0; i < 100; i++) {
                 var cell = document.getElementById('c' + i);
-                cell.innerText = val;
-                cell.className = 'cell ' + (val === 'X' ? 'x-color' : (val === 'O' ? 'o-color' : ''));
-            });
+                cell.innerText = board[i];
+                cell.className = 'cell ' + (board[i] === 'X' ? 'x-color' : (board[i] === 'O' ? 'o-color' : ''));
+            }
             var status = document.getElementById('status');
-            var role = (myId === playerX) ? " (Вы X)" : (myId === playerO ? " (Вы O)" : "");
-            status.innerText = winner ? (winner === "Draw" ? "Ничья!" : "Победа " + winner) : "Ход: " + turn + role;
+            var role = (myId === playerX) ? " (Вы за X)" : (myId === playerO ? " (Вы за O)" : " (Зритель)");
+            if (winner) {
+                status.innerText = winner === "Draw" ? "Ничья!" : "Победил " + winner + "!";
+            } else {
+                status.innerText = "Ход: " + turn + role;
+            }
         }
 
         function resetGame() {
@@ -127,19 +121,18 @@
         }
 
         function checkWinnerLogic() {
-            for (let i = 0; i < 100; i++) {
+            for (var i = 0; i < 100; i++) {
                 if (board[i] === "") continue;
-                let r = Math.floor(i / 10), c = i % 10;
-                // Проверка в 4 направлениях: вправо, вниз, диагональ вправо-вниз, диагональ влево-вниз
+                var r = Math.floor(i / 10), c = i % 10;
                 if (checkDir(r, c, 0, 1) || checkDir(r, c, 1, 0) || checkDir(r, c, 1, 1) || checkDir(r, c, 1, -1)) return board[i];
             }
             return board.indexOf("") === -1 ? "Draw" : null;
         }
 
         function checkDir(r, c, dr, dc) {
-            let symbol = board[r * 10 + c];
-            for (let i = 1; i < 5; i++) {
-                let nr = r + dr * i, nc = c + dc * i;
+            var symbol = board[r * 10 + c];
+            for (var i = 1; i < 5; i++) {
+                var nr = r + dr * i, nc = c + dc * i;
                 if (nr < 0 || nr >= 10 || nc < 0 || nc >= 10 || board[nr * 10 + nc] !== symbol) return false;
             }
             return true;
