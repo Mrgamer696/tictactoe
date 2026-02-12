@@ -7,26 +7,43 @@
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
     <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; }
-        .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; }
-        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; transition: 0.1s; }
-        .cell:active { transform: scale(0.95); }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 10px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 95vh; }
+        .grid { 
+            display: grid; 
+            grid-template-columns: repeat(10, 1fr); 
+            gap: 4px; 
+            width: 95vw; 
+            max-width: 400px;
+            background: #444;
+            padding: 4px;
+            border-radius: 8px;
+        }
+        .cell { 
+            aspect-ratio: 1/1;
+            background: #333; 
+            border-radius: 4px; 
+            display: flex; 
+            align-items: center; 
+            justify-content: center; 
+            font-size: 1.2rem; 
+            cursor: pointer; 
+            font-weight: bold; 
+        }
         .x-color { color: #ff4d4d; }
         .o-color { color: #2ecc71; }
-        #status { margin-bottom: 20px; font-size: 1.1rem; height: 40px; font-weight: bold; color: #00ccff; }
-        button { margin-top: 25px; padding: 10px 20px; border-radius: 8px; border: none; background: #444; color: white; cursor: pointer; }
+        #status { margin-bottom: 15px; font-size: 1rem; font-weight: bold; color: #00ccff; height: 20px; }
+        button { margin-top: 15px; padding: 8px 16px; border-radius: 8px; border: none; background: #444; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
     <div id="status">Загрузка...</div>
     <div class="grid" id="grid"></div>
-    <button onclick="resetGame()">Сбросить игру</button>
+    <button onclick="resetGame()">Сброс</button>
 
     <script>
         var tg = window.Telegram.WebApp;
         tg.expand();
-
-        var myId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : null;
+        var myId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "guest_" + Math.random();
 
         var firebaseConfig = {
             apiKey: "AIzaSyAHHiHrqqrmCLErO8kxZI1N8bYQ-amk0M",
@@ -40,20 +57,18 @@
         
         firebase.initializeApp(firebaseConfig);
         var db = firebase.database();
-
         var urlParams = new URLSearchParams(window.location.search);
-        var gameId = urlParams.get('game_id') || (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || 'lobby';
+        var gameId = urlParams.get('game_id') || 'lobby_10x10';
         var gameRef = db.ref('games/' + gameId);
 
-        var board = ["","","","","","","","",""];
-        var turn = "X";
-        var playerX = null;
-        var playerO = null;
+        var size = 10;
+        var board = Array(size * size).fill("");
+        var turn = "X", playerX = null, playerO = null;
 
         function initGrid() {
             var gridElement = document.getElementById('grid');
             gridElement.innerHTML = '';
-            for (var i = 0; i < 9; i++) {
+            for (var i = 0; i < size * size; i++) {
                 (function(index) {
                     var cell = document.createElement('div');
                     cell.className = 'cell';
@@ -67,98 +82,67 @@
         gameRef.on('value', function(snapshot) {
             var data = snapshot.val();
             if (data) {
-                board = data.board;
-                turn = data.turn;
-                playerX = data.playerX || null;
-                playerO = data.playerO || null;
+                board = data.board; turn = data.turn;
+                playerX = data.playerX; playerO = data.playerO;
                 render(data.winner);
-            } else {
-                resetGame();
-            }
+            } else { resetGame(); }
         });
 
         function makeMove(i) {
-    // 1. Если клетка занята или игра окончена - выходим
-    if (board[i] !== "" || checkWinner(board)) return;
+            if (board[i] !== "" || checkWinnerLogic()) return;
 
-    // 2. Если myId не определился (редкий баг Telegram), попробуем взять его снова
-    if (!myId) {
-        myId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : "guest_" + Math.random();
-    }
-
-    // 3. ЛОГИКА ХОДА
-    if (turn === "X") {
-        // Если X еще не назначен - назначаем текущего игрока
-        if (!playerX) {
-            playerX = myId;
-        } else if (myId !== playerX) {
-            tg.showAlert("Сейчас ход Крестиков. Вы за них не играете.");
-            return;
-        }
-    } else if (turn === "O") {
-        // Если ты - игрок X, ты НЕ можешь ходить за O
-        if (myId === playerX) {
-            tg.showAlert("Вы играете за Крестики! Ждите хода противника.");
-            return;
-        }
-
-        // Если игрок O еще не назначен - ПЕРВЫЙ, кто нажмет в ход O, становится игроком O
-        if (!playerO) {
-            playerO = myId;
-        } else if (myId !== playerO) {
-            tg.showAlert("Это место уже занято другим игроком!");
-            return;
-        }
-    }
-
-    // 4. Сохраняем ход и вибрируем
-    tg.HapticFeedback.impactOccurred('medium');
-    board[i] = turn;
-    gameRef.set({
-        board: board,
-        turn: (turn === "X" ? "O" : "X"),
-        winner: checkWinner(board),
-        playerX: playerX,
-        playerO: playerO
-    });
-}
-
-        function render(winner) {
-            for (var i = 0; i < 9; i++) {
-                var cell = document.getElementById('c' + i);
-                cell.innerText = board[i];
-                cell.className = 'cell ' + (board[i] === 'X' ? 'x-color' : (board[i] === 'O' ? 'o-color' : ''));
-            }
-            var status = document.getElementById('status');
-            var role = "";
-            if (myId === playerX) role = " (Вы за X)";
-            else if (myId === playerO) role = " (Вы за O)";
-            else if (playerX && playerO) role = " (Зритель)";
-
-            if (winner) {
-                status.innerText = (winner === "Draw" ? "🤝 Ничья!" : "🎉 Победил " + winner);
+            // Назначение ролей
+            if (turn === "X") {
+                if (!playerX) playerX = myId;
+                else if (myId !== playerX) { tg.showAlert("Ход Крестиков!"); return; }
             } else {
-                status.innerText = "Ход: " + turn + role;
+                if (myId === playerX) { tg.showAlert("Вы за X! Ждите оппонента."); return; }
+                if (!playerO) playerO = myId;
+                else if (myId !== playerO) { tg.showAlert("Ход Ноликов!"); return; }
             }
-        }
 
-        function resetGame() {
-            gameRef.set({ 
-                board: ["","","","","","","","",""], 
-                turn: "X", 
-                winner: null,
-                playerX: null,
-                playerO: null 
+            board[i] = turn;
+            tg.HapticFeedback.impactOccurred('light');
+            gameRef.set({
+                board: board,
+                turn: (turn === "X" ? "O" : "X"),
+                winner: checkWinnerLogic(),
+                playerX: playerX, playerO: playerO
             });
         }
 
-        function checkWinner(b) {
-            var lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
-            for (var i = 0; i < lines.length; i++) {
-                var l = lines[i];
-                if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return b[l[0]];
+        function render(winner) {
+            board.forEach(function(val, i) {
+                var cell = document.getElementById('c' + i);
+                cell.innerText = val;
+                cell.className = 'cell ' + (val === 'X' ? 'x-color' : (val === 'O' ? 'o-color' : ''));
+            });
+            var status = document.getElementById('status');
+            var role = (myId === playerX) ? " (Вы X)" : (myId === playerO ? " (Вы O)" : "");
+            status.innerText = winner ? (winner === "Draw" ? "Ничья!" : "Победа " + winner) : "Ход: " + turn + role;
+        }
+
+        function resetGame() {
+            gameRef.set({ board: Array(100).fill(""), turn: "X", winner: null, playerX: null, playerO: null });
+        }
+
+        function checkWinnerLogic() {
+            for (let i = 0; i < 100; i++) {
+                if (board[i] === "") continue;
+                let r = Math.floor(i / 10), c = i % 10;
+                // Проверка в 4 направлениях: вправо, вниз, диагональ вправо-вниз, диагональ влево-вниз
+                if (checkDir(r, c, 0, 1) || checkDir(r, c, 1, 0) || checkDir(r, c, 1, 1) || checkDir(r, c, 1, -1)) return board[i];
             }
-            return b.indexOf("") === -1 ? "Draw" : null;
+            return board.indexOf("") === -1 ? "Draw" : null;
+        }
+
+        function checkDir(r, c, dr, dc) {
+            let symbol = board[r * 10 + c];
+            for (let i = 1; i < 5; i++) {
+                let nr = r + dr * i, nc = c + dc * i;
+                if (nr < 0 || nr >= 10 || nc < 0 || nc >= 10 || board[nr * 10 + nc] !== symbol) return false;
+            }
+            return true;
         }
 
         initGrid();
