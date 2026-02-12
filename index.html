@@ -3,95 +3,31 @@
 <head>
     <meta charset="UTF-8">
     <meta name="viewport" content="width=device-width, initial-scale=1.0, maximum-scale=1.0, user-scalable=no">
-    <title>Tic-Tac-Toe Mini App</title>
     <script src="https://telegram.org/js/telegram-web-app.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-app-compat.js"></script>
-    <script src="https://www.gstatic.com/firebasejs/9.1.0/firebase-database-compat.js"></script>
-    
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-app.js"></script>
+    <script src="https://www.gstatic.com/firebasejs/8.10.0/firebase-database.js"></script>
     <style>
-        body { 
-            background: #1a1a1a; 
-            color: white; 
-            text-align: center; 
-            font-family: 'Segoe UI', Roboto, Helvetica, Arial, sans-serif; 
-            margin: 0; 
-            padding: 20px; 
-            display: flex;
-            flex-direction: column;
-            align-items: center;
-            justify-content: center;
-            min-height: 90vh;
-        }
-
-        h3 { margin-bottom: 5px; color: #fff; }
-
-        #status { 
-            margin-bottom: 20px; 
-            font-size: 1.4rem; 
-            font-weight: bold; 
-            height: 30px;
-            transition: 0.3s;
-        }
-
-        .grid { 
-            display: grid; 
-            grid-template-columns: repeat(3, 95px); 
-            gap: 12px; 
-            justify-content: center; 
-        }
-
-        .cell { 
-            width: 95px; 
-            height: 95px; 
-            background: #2a2a2a; 
-            border-radius: 15px; 
-            display: flex; 
-            align-items: center; 
-            justify-content: center; 
-            font-size: 3rem; 
-            cursor: pointer; 
-            font-weight: 900;
-            transition: transform 0.1s, background 0.2s;
-            box-shadow: 0 4px 10px rgba(0,0,0,0.3);
-        }
-
-        .cell:active { transform: scale(0.95); }
-
-        /* Цвета для символов */
-        .x-color { color: #ff4d4d; text-shadow: 0 0 15px rgba(255, 77, 77, 0.4); }
-        .o-color { color: #2ecc71; text-shadow: 0 0 15px rgba(46, 204, 113, 0.4); }
-
-        .btn-reset { 
-            margin-top: 30px; 
-            padding: 12px 25px; 
-            border: none; 
-            border-radius: 10px; 
-            background: #333; 
-            color: #ccc; 
-            font-weight: bold; 
-            cursor: pointer;
-            transition: 0.2s;
-        }
-
-        .btn-reset:hover { background: #444; color: #fff; }
+        body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; }
+        .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; }
+        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; }
+        .x-color { color: #ff4d4d; }
+        .o-color { color: #2ecc71; }
+        #status { margin-bottom: 20px; font-size: 1.1rem; height: 40px; font-weight: bold; color: #00ccff; }
+        button { margin-top: 25px; padding: 10px 20px; border-radius: 8px; border: none; background: #444; color: white; cursor: pointer; }
     </style>
 </head>
 <body>
-
-    <h3 id="title">Крестики-Нолики</h3>
     <div id="status">Загрузка...</div>
-    
     <div class="grid" id="grid"></div>
-
-    <button class="btn-reset" onclick="resetGame()">Начать заново</button>
+    <button onclick="resetGame()">Сбросить игру</button>
 
     <script>
-        const tg = window.Telegram.WebApp;
+        var tg = window.Telegram.WebApp;
         tg.expand();
-        tg.ready();
 
-        // 1. КОНФИГ FIREBASE (Твои данные)
-        const firebaseConfig = {
+        var myId = tg.initDataUnsafe.user ? tg.initDataUnsafe.user.id : null;
+
+        var firebaseConfig = {
             apiKey: "AIzaSyAHHiHrqqrmCLErO8kxZI1N8bYQ-amk0M",
             authDomain: "tictactoe-tg.firebaseapp.com",
             databaseURL: "https://tictactoe-tg-default-rtdb.europe-west1.firebasedatabase.app",
@@ -102,103 +38,105 @@
         };
         
         firebase.initializeApp(firebaseConfig);
-        const db = firebase.database();
+        var db = firebase.database();
 
-        // 2. ОПРЕДЕЛЕНИЕ КОМНАТЫ
-        const urlParams = new URLSearchParams(window.location.search);
-        // Берем ID из ссылки (game_id) или из параметров запуска Telegram
-        const gameId = urlParams.get('game_id') || tg.initDataUnsafe.start_param || 'global_lobby';
-        const gameRef = db.ref('games/' + gameId);
+        var urlParams = new URLSearchParams(window.location.search);
+        var gameId = urlParams.get('game_id') || (tg.initDataUnsafe && tg.initDataUnsafe.start_param) || 'lobby';
+        var gameRef = db.ref('games/' + gameId);
 
-        let board = Array(9).fill("");
-        let turn = "X";
+        var board = ["","","","","","","","",""];
+        var turn = "X";
+        var playerX = null;
+        var playerO = null;
 
-        // 3. СОЗДАНИЕ ПОЛЯ
         function initGrid() {
-            const gridElement = document.getElementById('grid');
+            var gridElement = document.getElementById('grid');
             gridElement.innerHTML = '';
-            for (let i = 0; i < 9; i++) {
-                const cell = document.createElement('div');
-                cell.className = 'cell';
-                cell.id = 'c' + i;
-                cell.onclick = () => makeMove(i);
-                gridElement.appendChild(cell);
+            for (var i = 0; i < 9; i++) {
+                (function(index) {
+                    var cell = document.createElement('div');
+                    cell.className = 'cell';
+                    cell.id = 'c' + index;
+                    cell.onclick = function() { makeMove(index); };
+                    gridElement.appendChild(cell);
+                })(i);
             }
         }
 
-        // 4. СИНХРОНИЗАЦИЯ С ОБЛАКОМ
-        gameRef.on('value', (snapshot) => {
-            const data = snapshot.val();
+        gameRef.on('value', function(snapshot) {
+            var data = snapshot.val();
             if (data) {
                 board = data.board;
                 turn = data.turn;
+                playerX = data.playerX || null;
+                playerO = data.playerO || null;
                 render(data.winner);
             } else {
-                // Если игры еще нет в базе, создаем её
                 resetGame();
             }
         });
 
-        // 5. ЛОГИКА ХОДА
         function makeMove(i) {
-            if (board[i] === "" && !checkWinner(board)) {
-                board[i] = turn;
-                const winner = checkWinner(board);
-                gameRef.set({
-                    board: board,
-                    turn: turn === "X" ? "O" : "X",
-                    winner: winner
-                });
+            // Если клетка занята или игра окончена - ничего не делаем
+            if (board[i] !== "" || checkWinner(board)) return;
+
+            // Назначаем игроков, если они еще не определены
+            if (turn === "X" && !playerX) playerX = myId;
+            else if (turn === "O" && !playerO && myId !== playerX) playerO = myId;
+
+            // ПРОВЕРКА: Твой ли сейчас ход?
+            if (turn === "X" && myId !== playerX) {
+                tg.showAlert("Вы играете за Нолики (или вы зритель)!");
+                return;
             }
-        }
-
-        // 6. ОТРИСОВКА ИНТЕРФЕЙСА
-        function render(winner) {
-            board.forEach((val, i) => {
-                const cell = document.getElementById('c' + i);
-                cell.innerText = val;
-                
-                // Сбрасываем и ставим цвета
-                cell.classList.remove('x-color', 'o-color');
-                if (val === "X") cell.classList.add('x-color');
-                if (val === "O") cell.classList.add('o-color');
-            });
-
-            const status = document.getElementById('status');
-            if (winner) {
-                if (winner === "Draw") {
-                    status.innerText = "🤝 Ничья!";
-                    status.style.color = "#aaa";
-                } else {
-                    status.innerText = "🎉 Победил " + winner + "!";
-                    status.style.color = (winner === "X") ? "#ff4d4d" : "#2ecc71";
-                }
-            } else {
-                status.innerText = "Ход: " + turn;
-                status.style.color = (turn === "X") ? "#ff4d4d" : "#2ecc71";
+            if (turn === "O" && myId !== playerO) {
+                tg.showAlert("Вы играете за Крестики!");
+                return;
             }
-        }
 
-        // 7. СБРОС ИГРЫ
-        function resetGame() {
+            board[i] = turn;
             gameRef.set({
-                board: Array(9).fill(""),
-                turn: "X",
-                winner: null
+                board: board,
+                turn: (turn === "X" ? "O" : "X"),
+                winner: checkWinner(board),
+                playerX: playerX,
+                playerO: playerO
             });
         }
 
-        // ПРОВЕРКА ПОБЕДИТЕЛЯ
+        function render(winner) {
+            for (var i = 0; i < 9; i++) {
+                var cell = document.getElementById('c' + i);
+                cell.innerText = board[i];
+                cell.className = 'cell ' + (board[i] === 'X' ? 'x-color' : (board[i] === 'O' ? 'o-color' : ''));
+            }
+            var status = document.getElementById('status');
+            var role = (myId === playerX) ? " (Вы за X)" : (myId === playerO ? " (Вы за O)" : " (Зритель)");
+
+            if (winner) {
+                status.innerText = (winner === "Draw" ? "Ничья!" : "Победил " + winner);
+            } else {
+                status.innerText = "Ход: " + turn + role;
+            }
+        }
+
+        function resetGame() {
+            gameRef.set({ 
+                board: ["","","","","","","","",""], 
+                turn: "X", 
+                winner: null,
+                playerX: null,
+                playerO: null 
+            });
+        }
+
         function checkWinner(b) {
-            const lines = [
-                [0,1,2], [3,4,5], [6,7,8], // горизонтали
-                [0,3,6], [1,4,7], [2,5,8], // вертикали
-                [0,4,8], [2,4,6]           // диагонали
-            ];
-            for (let l of lines) {
+            var lines = [[0,1,2],[3,4,5],[6,7,8],[0,3,6],[1,4,7],[2,5,8],[0,4,8],[2,4,6]];
+            for (var i = 0; i < lines.length; i++) {
+                var l = lines[i];
                 if (b[l[0]] && b[l[0]] === b[l[1]] && b[l[0]] === b[l[2]]) return b[l[0]];
             }
-            return b.includes("") ? null : "Draw";
+            return b.indexOf("") === -1 ? "Draw" : null;
         }
 
         initGrid();
