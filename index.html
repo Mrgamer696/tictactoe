@@ -9,7 +9,8 @@
     <style>
         body { background: #1a1a1a; color: white; text-align: center; font-family: sans-serif; margin: 0; padding: 20px; display: flex; flex-direction: column; align-items: center; justify-content: center; min-height: 90vh; }
         .grid { display: grid; grid-template-columns: repeat(3, 90px); gap: 10px; justify-content: center; }
-        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; }
+        .cell { width: 90px; height: 90px; background: #333; border-radius: 12px; display: flex; align-items: center; justify-content: center; font-size: 2.5rem; cursor: pointer; font-weight: bold; transition: 0.1s; }
+        .cell:active { transform: scale(0.95); }
         .x-color { color: #ff4d4d; }
         .o-color { color: #2ecc71; }
         #status { margin-bottom: 20px; font-size: 1.1rem; height: 40px; font-weight: bold; color: #00ccff; }
@@ -76,56 +77,40 @@
             }
         });
 
-    function makeMove(i) {
-        // 1. Базовые проверки: занята ли клетка или есть ли победитель
-        if (board[i] !== "" || checkWinner(board)) return;
+        function makeMove(i) {
+            if (board[i] !== "" || checkWinner(board)) return;
 
-        // 2. Логика назначения ролей и блокировки
-        if (turn === "X") {
-            // Если за X еще никто не закрепился — закрепляем текущего игрока
-            if (!playerX) {
-                playerX = myId;
-            } else if (myId !== playerX) {
-                tg.showAlert("Сейчас ход Крестиков, а вы — не он!");
-                return;
-            }
-        } else if (turn === "O") {
-            // Проверяем, не пытается ли игрок X ходить за O
-            if (myId === playerX) {
-                tg.showAlert("Вы играете за Крестики! Подождите хода противника.");
-                return;
+            // Назначение ролей
+            if (turn === "X") {
+                if (!playerX) {
+                    playerX = myId;
+                } else if (myId !== playerX) {
+                    tg.showAlert("Сейчас ход Крестиков, а вы — не он!");
+                    return;
+                }
+            } else if (turn === "O") {
+                // Запрет игроку X ходить за O
+                if (myId === playerX) {
+                    tg.showAlert("Вы играете за Крестики! Ждите хода противника.");
+                    return;
+                }
+                if (!playerO) {
+                    playerO = myId;
+                } else if (myId !== playerO) {
+                    tg.showAlert("Сейчас ход Ноликов, а вы — не он!");
+                    return;
+                }
             }
 
-            // Если за O еще никто не закрепился — закрепляем текущего игрока
-            if (!playerO) {
-                playerO = myId;
-            } else if (myId !== playerO) {
-                tg.showAlert("Сейчас ход Ноликов, а вы — не он!");
-                return;
-            }
+            board[i] = turn;
+            gameRef.set({
+                board: board,
+                turn: (turn === "X" ? "O" : "X"),
+                winner: checkWinner(board),
+                playerX: playerX,
+                playerO: playerO
+            });
         }
-
-    // 3. Если все проверки пройдены, обновляем базу данных
-    board[i] = turn;
-    gameRef.set({
-        board: board,
-        turn: (turn === "X" ? "O" : "X"),
-        winner: checkWinner(board),
-        playerX: playerX,
-        playerO: playerO
-    });
-}
-
-        // 4. Если проверки пройдены — делаем ход
-        board[i] = turn;
-        gameRef.set({
-            board: board,
-            turn: (turn === "X" ? "O" : "X"),
-            winner: checkWinner(board),
-            playerX: playerX,
-            playerO: playerO
-        });
-    }
 
         function render(winner) {
             for (var i = 0; i < 9; i++) {
@@ -134,10 +119,13 @@
                 cell.className = 'cell ' + (board[i] === 'X' ? 'x-color' : (board[i] === 'O' ? 'o-color' : ''));
             }
             var status = document.getElementById('status');
-            var role = (myId === playerX) ? " (Вы за X)" : (myId === playerO ? " (Вы за O)" : " (Зритель)");
+            var role = "";
+            if (myId === playerX) role = " (Вы за X)";
+            else if (myId === playerO) role = " (Вы за O)";
+            else if (playerX && playerO) role = " (Зритель)";
 
             if (winner) {
-                status.innerText = (winner === "Draw" ? "Ничья!" : "Победил " + winner);
+                status.innerText = (winner === "Draw" ? "🤝 Ничья!" : "🎉 Победил " + winner);
             } else {
                 status.innerText = "Ход: " + turn + role;
             }
